@@ -1,0 +1,44 @@
+{
+    "name":  "Noir",
+    "identifier":  "com.trualontuu.noir.source",
+    "subtitle":  "Чёрно-белый плеер Яндекс Музыки",
+    "iconURL":  "https://noir-ios.pages.dev/icon.png",
+    "tintColor":  "#F2F2F2",
+    "apps":  [
+                 {
+                     "name":  "Noir",
+                     "bundleIdentifier":  "com.trualontuu.noir",
+                     "developerName":  "trualontuu",
+                     "subtitle":  "Яндекс Музыка в чёрно-белом",
+                     "localizedDescription":  "Моя волна, лайки, плейлисты, поиск, скачивание треков, фон и локскрин. Неофициальный клиент.",
+                     "iconURL":  "https://noir-ios.pages.dev/icon.png",
+                     "tintColor":  "#F2F2F2",
+                     "category":  "entertainment",
+                     "screenshots":  [
+
+                                     ],
+                     "versions":  [
+                                      {
+                                          "version":  "0.3.0",
+                                          "buildVersion":  "1",
+                                          "date":  "2026-11-19",
+                                          "localizedDescription":  "Обновления по воздуху, пульт для компьютера",
+                                          "downloadURL":  "https://noir-ios.pages.dev/Noir.ipa?v=0.3.0",
+                                          "size":  12668196,
+                                          "minOSVersion":  "16.4"
+                                      }
+                                  ],
+                     "appPermissions":  {
+                                            "entitlements":  [
+
+                                                             ],
+                                            "privacy":  {
+
+                                                        }
+                                        }
+                 }
+             ],
+    "news":  [
+
+             ]
+}
