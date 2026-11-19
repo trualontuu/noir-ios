@@ -19,12 +19,12 @@
                                      ],
                      "versions":  [
                                       {
-                                          "version":  "0.3.0",
+                                          "version":  "0.4.0",
                                           "buildVersion":  "1",
                                           "date":  "2026-11-19",
-                                          "localizedDescription":  "Обновления по воздуху, пульт для компьютера",
-                                          "downloadURL":  "https://noir-ios.pages.dev/Noir.ipa?v=0.3.0",
-                                          "size":  12668196,
+                                          "localizedDescription":  "Кнопки громкости айфона управляют компьютером",
+                                          "downloadURL":  "https://noir-ios.pages.dev/Noir.ipa?v=0.4.0",
+                                          "size":  12723613,
                                           "minOSVersion":  "16.4"
                                       }
                                   ],
