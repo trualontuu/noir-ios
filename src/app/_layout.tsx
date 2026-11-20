@@ -38,6 +38,7 @@ export default function Root() {
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="player" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
+            <Stack.Screen name="share" options={{ presentation: 'modal', contentStyle: { backgroundColor: C.bg } }} />
             <Stack.Screen name="remote" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom', contentStyle: { backgroundColor: 'transparent' } }} />
           </Stack>
         )}

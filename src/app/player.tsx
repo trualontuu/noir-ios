@@ -106,6 +106,9 @@ export default function Player() {
             <Tap hitSlop={12} haptic="select" onPress={() => toggleMode('queue')}>
               <Icon name="list.bullet" size={21} color={mode === 'queue' ? th.accent : C.dim} />
             </Tap>
+            <Tap hitSlop={12} haptic="light" onPress={() => router.push('/share' as any)}>
+              <Icon name="square.and.arrow.up" size={20} color={C.dim} />
+            </Tap>
           </View>
         </View>
         {!!st.error && <Text style={s.err} numberOfLines={2}>{st.error}</Text>}
@@ -348,7 +351,7 @@ const s = StyleSheet.create({
   side: { width: 36, alignItems: 'center' },
   play: { width: 78, height: 78, borderRadius: 39, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.45, shadowRadius: 22, shadowOffset: { width: 0, height: 6 } },
   bottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingHorizontal: 8 },
-  right: { flexDirection: 'row', alignItems: 'center', gap: 26 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 24 },
   lyrEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   lyrMsg: { color: 'rgba(242,242,242,0.55)', fontSize: 15, textAlign: 'center' },
   lyrLine: { color: 'rgba(242,242,242,0.28)', fontSize: 27, fontWeight: '800', letterSpacing: -0.4, lineHeight: 34, paddingVertical: 7 },
