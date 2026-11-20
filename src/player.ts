@@ -65,6 +65,26 @@ let seekUntil = 0;
 let baseVol = 1;           // громкость по LUFS
 let fadeInAt = 0, fadeInMs = 0;    // нарастание в начале трека / после паузы
 let ticker: ReturnType<typeof setInterval> | null = null;
+let stallSince = 0;
+
+/** Похоже на «нет сети», а не на проблему с конкретным треком. */
+const isNet = (e: any) => e instanceof TypeError || /network|timed out|offline|internet|связ/i.test(String(e?.message ?? e));
+
+/**
+ * Пропала сеть посреди волны: всё, что после текущего трека, заменяем запасом волны.
+ * skipCurrent — текущий трек тоже не доиграет (он не скачан), сразу переходим к запасу.
+ */
+function goOffline(skipCurrent: boolean): boolean {
+  const have = new Set(state.queue.slice(0, state.index + 1).map(t => t.id));
+  const spare = pool.offlineQueue().filter(t => !have.has(t.id));
+  if (!spare.length) { set({ error: 'Нет связи. Включи «Волну без интернета» в настройках, чтобы играть без сети' }); return false; }
+  wave = null;
+  if (skipCurrent) { playList([...state.queue.slice(0, state.index), ...spare], state.index, null, true, true); return true; }
+  trimAhead();
+  set({ queue: [...state.queue.slice(0, state.index + 1), ...spare], offline: true, error: null });
+  setTimeout(fill, 0);
+  return true;
+}
 
 async function ensure(): Promise<AudioPlaylist> {
   if (pl) return pl;
@@ -79,6 +99,11 @@ function onStatus(s: AudioPlaylistStatus) {
   if (s.currentTime > 0) lastTime = s.currentTime;
   if (s.didJustFinish && wave && current()) ym.waveFeedback(wave, 'trackFinished', current()!, lastTime);
   if (!pausing && (s.playing !== state.playing || s.isBuffering !== state.buffering)) set({ playing: s.playing, buffering: s.isBuffering });
+  // онлайн-волна застряла в загрузке дольше 10 с (пропала сеть) — переходим на запас
+  if (s.isBuffering && state.wave && !state.offline && !dl.localUri(current() ?? ({ id: '' } as Track))) {
+    if (!stallSince) stallSince = Date.now();
+    else if (Date.now() - stallSince > 10000) { stallSince = 0; goOffline(true); }
+  } else stallSince = 0;
   let time = s.currentTime;
   if (seekTo != null) {
     if (Date.now() < seekUntil && Math.abs(time - seekTo) > 1.2) time = seekTo;
@@ -146,6 +171,7 @@ function started() {
   applyVolume();
   if (wave) ym.waveFeedback(wave, 'trackStarted', t);
   dl.markPlayed(t.id);
+  if (state.offline) pool.refresh();
 }
 
 export function applyVolume() {
@@ -175,7 +201,9 @@ async function fill() {
       if (!(await addAt(base + pl.trackCount, g))) break;
     }
   } catch (e: any) {
-    if (g === gen) set({ error: e?.message ?? String(e) });
+    if (g !== gen) return;
+    if (state.wave && !state.offline && isNet(e) && (filling = false, goOffline(false))) return;
+    set({ error: e?.message ?? String(e) });
   } finally { filling = false; }
 }
 
@@ -188,7 +216,7 @@ async function addAt(i: number, g: number): Promise<boolean> {
     pl!.add({ uri, name: ym.fullTitle(t) });
     return true;
   } catch (e) {
-    if (e instanceof ym.AuthError) throw e;
+    if (e instanceof ym.AuthError || isNet(e)) throw e; // без сети треки не выкидываем
     if (g !== gen) return false;
     const q = state.queue.slice(); q.splice(i, 1);
     set({ queue: q, index: i < state.index ? state.index - 1 : state.index });
@@ -229,7 +257,11 @@ export async function playList(tracks: Track[], start = 0, session: WaveSession 
     while (g === gen && p.trackCount === 0 && base < state.queue.length) {
       if (await addAt(base, g)) break;
     }
-  } catch (e: any) { set({ error: e?.message ?? String(e), buffering: false }); return; }
+  } catch (e: any) {
+    if (g === gen) building = false;
+    if (g === gen && session && isNet(e) && goOffline(false)) { playList(state.queue, state.index, null, true, true); return; }
+    set({ error: e?.message ?? String(e), buffering: false }); return;
+  }
   finally { if (g === gen) building = false; }
   if (g !== gen || p.trackCount === 0) return;
   set({ index: base });

@@ -1,6 +1,7 @@
 // «Волна без интернета»: держим N треков «Моей волны» скачанными заранее.
 // Прослушанные выкидываем и докачиваем свежие, когда есть сеть: при открытии приложения
-// (не чаще раза в 30 минут), при старте волны онлайн и при смене настройки.
+// (не чаще раза в 30 минут), при старте волны онлайн, при смене настройки и на каждом треке,
+// пока волна играет из запаса (без сети — попытка раз в 2 минуты: как появится интернет, докачаем).
 import { AppState } from 'react-native';
 import * as dl from './downloads';
 import { settings } from './settings';
@@ -8,7 +9,8 @@ import * as ym from './ym';
 import type { Track } from './ym';
 
 let busy = false;
-let lastAt = 0;
+let lastAt = 0;   // последнее удачное обновление
+let lastTry = 0;  // последняя попытка (без сети пробуем раз в 2 минуты)
 let currentId: () => string | undefined = () => undefined;
 
 /** player сообщает, что сейчас играет — этот трек из запаса не удаляем. */
@@ -22,20 +24,23 @@ export async function refresh(force = false) {
     if (ids.length) dl.dropPool(ids);
     return;
   }
-  if (busy || (!force && Date.now() - lastAt < 30 * 60e3)) return;
+  if (busy || (!force && (Date.now() - lastAt < 30 * 60e3 || Date.now() - lastTry < 2 * 60e3))) return;
   busy = true;
+  lastTry = Date.now();
   try {
     const all = dl.poolTracks();
     const played = all.filter(e => e.played && e.track.id !== cur).map(e => e.track.id);
     let keep = all.filter(e => !played.includes(e.track.id));
     const extra = keep.length > n ? keep.slice(0, keep.length - n).map(e => e.track.id).filter(id => id !== cur) : [];
-    if (played.length || extra.length) dl.dropPool([...played, ...extra]);
     keep = keep.filter(e => !extra.includes(e.track.id));
+    if (extra.length) dl.dropPool(extra);
     const need = n - keep.length - dl.poolPending();
     if (need <= 0) { lastAt = Date.now(); return; }
 
+    // сначала убеждаемся, что сеть есть: без неё прослушанные не трогаем — их ещё можно слушать по второму кругу
     const s = settings();
     const { session, tracks } = await ym.waveStart(ym.waveSeeds(s.waveMood, s.waveDiversity, s.waveScene));
+    if (played.length) dl.dropPool(played);
     const fresh = (t: Track) => t.available && !dl.isDownloaded(t.id) && !dl.inPool(t.id);
     const got: Track[] = tracks.filter(fresh);
     for (let i = 0; i < 6 && got.length < need; i++) {
