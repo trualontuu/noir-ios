@@ -11,6 +11,7 @@ import type { Track } from './ym';
 let busy = false;
 let lastAt = 0;   // последнее удачное обновление
 let lastTry = 0;  // последняя попытка (без сети пробуем раз в 2 минуты)
+let rounds = 0;    // сколько раз подряд добирали после завершения загрузок
 let currentId: () => string | undefined = () => undefined;
 
 /** player сообщает, что сейчас играет — этот трек из запаса не удаляем. */
@@ -43,10 +44,15 @@ export async function refresh(force = false) {
     if (played.length) dl.dropPool(played);
     const fresh = (t: Track) => t.available && !dl.isDownloaded(t.id) && !dl.inPool(t.id);
     const got: Track[] = tracks.filter(fresh);
-    for (let i = 0; i < 6 && got.length < need; i++) {
-      const more = await ym.waveMore(session, got.slice(-5).length ? got.slice(-5) : tracks.slice(-5));
-      if (!more.length) break;
+    // волна отдаёт ~5 треков за раз (часть — повторы или уже скачанные): просим, пока не наберём,
+    // но бросаем, если 3 раза подряд ничего нового
+    let last = tracks.slice(-5), empty = 0;
+    for (let i = 0; i < 40 && got.length < need && empty < 3; i++) {
+      const more = await ym.waveMore(session, last);
+      const before = got.length;
       for (const t of more) if (fresh(t) && !got.some(x => x.id === t.id)) got.push(t);
+      if (more.length) last = more.slice(-5);
+      empty = got.length > before ? 0 : empty + 1;
     }
     dl.fillPool(got.slice(0, need));
     lastAt = Date.now();
@@ -68,6 +74,17 @@ function shuffled<T>(a: T[]): T[] {
   for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; }
   return r;
 }
+
+// загрузки запаса закончились, а до нужного числа не дотянули (повторы, ошибки) — добираем ещё,
+// но не больше 3 раз подряд, чтобы не крутиться, если волне больше нечего предложить
+dl.onPoolIdle(() => {
+  const n = settings().offlineWave;
+  if (!n) return;
+  if (dl.poolTracks().filter(e => !e.played).length >= n) { rounds = 0; return; }
+  if (rounds >= 3) return;
+  rounds++;
+  setTimeout(() => refresh(true), 3000);
+});
 
 // открыли приложение — освежаем запас (сама функция не чаще раза в 30 минут)
 AppState.addEventListener('change', s => { if (s === 'active') refresh(); });

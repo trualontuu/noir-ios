@@ -185,6 +185,7 @@ async function onePool(t: Track) {
   } finally {
     const { [t.id]: _, ...poolBusy } = state.poolBusy;
     set({ poolBusy });
+    if (!Object.keys(poolBusy).length) idleHooks.forEach(f => f());
   }
 }
 
@@ -218,6 +219,9 @@ export const poolTracks = () => Object.values(state.pool).sort((a, b) => a.at - 
 export const poolBytes = () => Object.values(state.pool).reduce((n, e) => n + e.size, 0);
 export const inPool = (id: string) => !!state.pool[id];
 export const poolPending = () => Object.keys(state.poolBusy).length;
+const idleHooks = new Set<() => void>();
+/** Вызывается, когда очередь загрузок запаса опустела. */
+export const onPoolIdle = (f: () => void) => { idleHooks.add(f); };
 
 /** Трек из запаса прозвучал — при следующем обновлении его заменит свежий. */
 export function markPlayed(id: string) {
