@@ -3,9 +3,10 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, FlatList, PanResponder, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, FlatList, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as dl from '../downloads';
+import * as lyr from '../lyrics';
 import * as player from '../player';
 import * as remote from '../remote';
 import { EqBars } from '../ui/EqBars';
@@ -29,7 +30,8 @@ export default function Player() {
   const { width, height } = useWindowDimensions();
   const dismiss = useDismissPan(height);
   const t = st.queue[st.index];
-  const [showQueue, setShowQueue] = useState(false);
+  const [mode, setMode] = useState<'cover' | 'queue' | 'lyrics'>('cover');
+  const toggleMode = (m: 'queue' | 'lyrics') => setMode(v => v === m ? 'cover' : m);
   const coverScale = useSpring(st.playing ? 1 : 0.86, { bounciness: 9 });
 
   if (!t) {
@@ -52,7 +54,7 @@ export default function Player() {
           <Tap onPress={() => menu(t)} hitSlop={14} style={s.topBtn}><Icon name="ellipsis" size={20} color={C.fg} /></Tap>
         </View>
 
-        {showQueue ? <Queue accent={th.accent} /> : (
+        {mode === 'queue' ? <Queue accent={th.accent} /> : mode === 'lyrics' ? <LyricsView track={t} accent={th.accent} /> : (
           <View style={s.coverWrap}>
             <Animated.View style={{ transform: [{ scale: coverScale }] }}>
               <SwipeCover uri={dl.coverSrc(t, 1000)} size={cover} width={width} />
@@ -97,9 +99,14 @@ export default function Player() {
             <Icon name={host ? 'hifispeaker.2.fill' : 'hifispeaker.2'} size={18} color={host ? th.accent : C.dim} />
             {host && <Text style={[s.deviceText, { color: th.accent }]} numberOfLines={1}>{host.name}</Text>}
           </Tap>
-          <Tap hitSlop={12} haptic="select" onPress={() => setShowQueue(v => !v)}>
-            <Icon name="list.bullet" size={21} color={showQueue ? th.accent : C.dim} />
-          </Tap>
+          <View style={s.right}>
+            <Tap hitSlop={12} haptic="select" onPress={() => toggleMode('lyrics')}>
+              <Icon name="quote.bubble" size={21} color={mode === 'lyrics' ? th.accent : C.dim} />
+            </Tap>
+            <Tap hitSlop={12} haptic="select" onPress={() => toggleMode('queue')}>
+              <Icon name="list.bullet" size={21} color={mode === 'queue' ? th.accent : C.dim} />
+            </Tap>
+          </View>
         </View>
         {!!st.error && <Text style={s.err} numberOfLines={2}>{st.error}</Text>}
       </View>
@@ -228,6 +235,71 @@ function Progress({ accent }: { accent: string }) {
   );
 }
 
+/**
+ * Текст песни: текущая строка яркая и держится в верхней трети, прошедшие тускнеют.
+ * Тап по строке — перемотка к ней. Если прокрутил сам — 4 секунды не мешаем.
+ */
+function LyricsView({ track, accent }: { track: ym.Track; accent: string }) {
+  const { state, l } = lyr.useLyrics(track);
+  const p = player.useProgress();
+  const playing = player.usePlayerSel(x => x.playing);
+  const sc = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const ys = useRef<number[]>([]);
+  const [h, setH] = useState(400);
+  const userAt = useRef(0);
+  const [, force] = useState(0);
+  // между событиями плеера (4 р/с) досчитываем время сами, чтобы строка менялась вовремя
+  useEffect(() => {
+    if (!playing || !l?.lines.length) return;
+    const id = setInterval(() => force(x => x + 1), 120);
+    return () => clearInterval(id);
+  }, [playing, l]);
+  const time = p.time + (playing ? (Date.now() - p.at) / 1000 : 0);
+  const lines = l?.lines ?? [];
+  const cur = lyr.lineAt(lines, time);
+
+  useEffect(() => {
+    if (cur < 0 || Date.now() - userAt.current < 4000) return;
+    const y = ys.current[cur];
+    if (y != null) sc.current?.scrollTo({ y: Math.max(0, y - h * 0.3), animated: true });
+  }, [cur, h]);
+
+  if (state !== 'ok' || !l) {
+    const msg = state === 'loading' ? null : state === 'offline' ? 'Нет связи — текст появится, когда будет интернет' : 'Текста для этого трека нет';
+    return (
+      <View style={s.lyrEmpty}>
+        {msg ? <Text style={s.lyrMsg}>{msg}</Text> : <ActivityIndicator color={C.dim} />}
+      </View>
+    );
+  }
+  if (!lines.length) {
+    return (
+      <ScrollView style={{ flex: 1, marginTop: 10 }} contentContainerStyle={{ paddingVertical: 20 }} showsVerticalScrollIndicator={false}>
+        <Text style={s.lyrPlain}>{l.instrumental ? 'Инструментал ♪' : l.plain}</Text>
+        {!l.instrumental && <Text style={s.lyrNote}>Текст без синхронизации</Text>}
+      </ScrollView>
+    );
+  }
+  return (
+    <FadeIn style={{ flex: 1, marginTop: 6 }} dy={14}>
+      <ScrollView ref={sc} onLayout={e => setH(e.nativeEvent.layout.height)} showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => { userAt.current = Date.now(); }} onMomentumScrollEnd={() => { userAt.current = Date.now(); }}
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: h * 0.6 }}>
+        {lines.map((ln, i) => (
+          <Pressable key={i} onLayout={e => { ys.current[i] = e.nativeEvent.layout.y; }}
+            onPress={() => { Haptics.selectionAsync(); userAt.current = 0; player.seek(ln.t); }}>
+            <Text style={[s.lyrLine, i === cur ? { color: C.fg } : i < cur ? { color: 'rgba(242,242,242,0.38)' } : null,
+              i === cur && { textShadowColor: accent, textShadowRadius: 18 }]}>
+              {ln.text || '♪'}
+            </Text>
+          </Pressable>
+        ))}
+        <Text style={s.lyrNote}>LRCLIB</Text>
+      </ScrollView>
+    </FadeIn>
+  );
+}
+
 /** «Далее»: текущий и следующие треки очереди, тап — перейти. */
 function Queue({ accent }: { accent: string }) {
   const st = player.usePlayer();
@@ -276,6 +348,12 @@ const s = StyleSheet.create({
   side: { width: 36, alignItems: 'center' },
   play: { width: 78, height: 78, borderRadius: 39, alignItems: 'center', justifyContent: 'center', shadowOpacity: 0.45, shadowRadius: 22, shadowOffset: { width: 0, height: 6 } },
   bottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingHorizontal: 8 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 26 },
+  lyrEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  lyrMsg: { color: 'rgba(242,242,242,0.55)', fontSize: 15, textAlign: 'center' },
+  lyrLine: { color: 'rgba(242,242,242,0.28)', fontSize: 27, fontWeight: '800', letterSpacing: -0.4, lineHeight: 34, paddingVertical: 7 },
+  lyrPlain: { color: 'rgba(242,242,242,0.85)', fontSize: 20, fontWeight: '700', lineHeight: 30 },
+  lyrNote: { color: 'rgba(242,242,242,0.3)', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 18 },
   device: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 180 },
   deviceText: { fontSize: 13, fontWeight: '600' },
   err: { color: C.danger, fontSize: 12, textAlign: 'center', marginTop: 6 },

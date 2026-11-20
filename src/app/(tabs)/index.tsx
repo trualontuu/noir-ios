@@ -81,7 +81,7 @@ export default function Wave() {
         )}
       </View>
 
-      <Text style={s_.caption}>МОЯ ВОЛНА</Text>
+      <Text style={s_.caption}>{st.offline ? 'МОЯ ВОЛНА · БЕЗ СЕТИ' : 'МОЯ ВОЛНА'}</Text>
       <Pressable onPress={() => t && router.push('/player')}>
         <FadeIn key={t?.id ?? 'none'} dy={8}>
           <Text style={s_.title} numberOfLines={1}>{t ? ym.fullTitle(t) : 'Бесконечный поток'}</Text>

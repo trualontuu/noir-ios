@@ -8,6 +8,7 @@ import * as dl from '../../../downloads';
 import * as player from '../../../player';
 import { setSettings, useSettings } from '../../../settings';
 import { C, R, useTheme } from '../../../ui/theme';
+import * as pool from '../../../wavePool';
 import * as ym from '../../../ym';
 
 /** Настройки — те же, что в десктопном Noir, без того, что на телефоне не нужно. */
@@ -25,6 +26,11 @@ export default function Settings() {
     async i => { if (i === 0) { player.stop(); await ym.logout(); } },
   );
   const old = dl.outdated();
+  const poolN = Object.keys(d.pool).length;
+  const poolBusy = Object.keys(d.poolBusy).length;
+  const poolHint = !s.offlineWave
+    ? 'Заранее скачать треки «Моей волны»: без сети она включится из запаса. В «Скачанных» их не видно.'
+    : `${poolN ? `Готово ${ym.tracksWord(poolN)} · ${dl.fmtSize(dl.poolBytes())}` : 'Пока пусто'}${poolBusy ? ` · докачиваю ${poolBusy}` : ''}. Прослушанные сами заменяются свежими, когда есть интернет.`;
   const busyDl = Object.keys(d.progress).filter(id => d.done[id]).length;
   const convert = () => ActionSheetIOS.showActionSheetWithOptions(
     { title: `Перекачать ${ym.tracksWord(old.length)} в ${s.dlQuality === 'mp3' ? 'MP3' : 'формате AAC'}?`,
@@ -68,6 +74,12 @@ export default function Settings() {
           <Pressable onPress={convert}><Text style={[st.action, { color: th.accent }]}>Пережать скачанные ({ym.tracksWord(old.length)})</Text></Pressable>
         ))}
         {count > 0 && <Pressable onPress={clear}><Text style={[st.action, { color: C.danger }]}>Удалить все загрузки</Text></Pressable>}
+      </Group>
+
+      <Group title="Волна без интернета">
+        <Segment value={String(s.offlineWave)} accent={th} items={[['0', 'Выкл'], ['20', '20 треков'], ['40', '40 треков']]}
+          onPick={v => { setSettings({ offlineWave: Number(v) as any }); pool.refresh(true); }} />
+        <Text style={st.hint}>{poolHint}</Text>
       </Group>
 
       <Group title="Аккаунт">

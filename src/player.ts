@@ -6,6 +6,7 @@ import { createAudioPlaylist, setAudioModeAsync, type AudioPlaylist, type AudioP
 import { useSyncExternalStore } from 'react';
 import * as dl from './downloads';
 import { settings } from './settings';
+import * as pool from './wavePool';
 import * as ym from './ym';
 import type { Track, WaveSession } from './ym';
 
@@ -21,12 +22,13 @@ export type PlayerState = {
   playing: boolean;
   buffering: boolean;
   wave: boolean;
+  offline: boolean;        // волна играет из запаса, без интернета
   shuffle: boolean;
   repeat: Repeat;
   error: string | null;
 };
 
-let state: PlayerState = { queue: [], index: -1, playing: false, buffering: false, wave: false, shuffle: false, repeat: 'off', error: null };
+let state: PlayerState = { queue: [], index: -1, playing: false, buffering: false, wave: false, offline: false, shuffle: false, repeat: 'off', error: null };
 const subs = new Set<() => void>();
 function set(p: Partial<PlayerState>) { state = { ...state, ...p }; subs.forEach(f => f()); }
 const subscribe = (cb: () => void) => { subs.add(cb); return () => { subs.delete(cb); }; };
@@ -44,6 +46,7 @@ function setProg(time: number, duration: number) { prog = { time, duration, at: 
 export const getProgress = () => prog;
 export const useProgress = () => useSyncExternalStore(cb => { progSubs.add(cb); return () => { progSubs.delete(cb); }; }, getProgress);
 export const current = (): Track | null => state.queue[state.index] ?? null;
+pool.setCurrentGetter(() => current()?.id);
 /** Перерисовать подписчиков (лайк, загрузка) без смены состояния плеера. */
 export const touch = () => set({});
 
@@ -142,6 +145,7 @@ function started() {
   } else pl.updateLockScreenMetadata(meta);
   applyVolume();
   if (wave) ym.waveFeedback(wave, 'trackStarted', t);
+  dl.markPlayed(t.id);
 }
 
 export function applyVolume() {
@@ -200,7 +204,7 @@ function trimAhead() {
 }
 
 /** Играть список с позиции start. */
-export async function playList(tracks: Track[], start = 0, session: WaveSession | null = null, keepSource = false) {
+export async function playList(tracks: Track[], start = 0, session: WaveSession | null = null, keepSource = false, offline = false) {
   const p = await ensure();
   const g = ++gen;
   wave = session;
@@ -218,7 +222,7 @@ export async function playList(tracks: Track[], start = 0, session: WaveSession 
   p.clear();
   base = at;
   userSkip = false;
-  set({ queue: list, index: at, wave: !!session, error: null, buffering: true });
+  set({ queue: list, index: at, wave: !!session || offline, offline, error: null, buffering: true });
   setProg(0, (list[at]?.durationMs ?? 0) / 1000);
   seekTo = null;
   try {
@@ -238,12 +242,21 @@ export async function playList(tracks: Track[], start = 0, session: WaveSession 
 
 export async function playWave() {
   const s = settings();
+  const spare = pool.offlineQueue();
   set({ buffering: true, error: null });
   try {
-    const { session, tracks } = await ym.waveStart(ym.waveSeeds(s.waveMood, s.waveDiversity, s.waveScene));
+    // есть запас — долго сеть не ждём: через 7 секунд играем из него
+    const start = ym.waveStart(ym.waveSeeds(s.waveMood, s.waveDiversity, s.waveScene));
+    const { session, tracks } = spare.length ? await Promise.race([start, timeout(7000)]) : await start;
     await playList(tracks, 0, session);
-  } catch (e: any) { set({ error: e?.message ?? String(e), buffering: false }); }
+    pool.refresh();
+  } catch (e: any) {
+    if (spare.length && !(e instanceof ym.AuthError)) { await playList(spare, 0, null, false, true); return; }
+    set({ error: e?.message ?? String(e), buffering: false });
+  }
 }
+
+const timeout = (ms: number) => new Promise<never>((_, no) => setTimeout(() => no(new Error('нет связи')), ms));
 
 let pausing: ReturnType<typeof setTimeout> | null = null;
 
@@ -356,7 +369,7 @@ export function stop() {
   gen++;
   wave = null;
   if (pl) { pl.clear(); pl.clearLockScreenControls(); lockActive = false; }
-  set({ queue: [], index: -1, playing: false, wave: false });
+  set({ queue: [], index: -1, playing: false, wave: false, offline: false });
   setProg(0, 0);
 }
 

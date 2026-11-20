@@ -11,9 +11,10 @@ export type Settings = {
   waveMood: string;
   waveDiversity: string;
   crossfade: 0 | 3 | 6 | 10;     // плавный переход между треками, секунд
+  offlineWave: 0 | 20 | 40;      // сколько треков волны держать скачанными для игры без сети
 };
 
-const defaults: Settings = { colorMode: 'cover', normalize: true, quality: 320, dlQuality: 'aac192', waveScene: '', waveMood: '', waveDiversity: '', crossfade: 6 };
+const defaults: Settings = { colorMode: 'cover', normalize: true, quality: 320, dlQuality: 'aac192', waveScene: '', waveMood: '', waveDiversity: '', crossfade: 6, offlineWave: 0 };
 const file = new File(Paths.document, 'settings.json');
 
 let s: Settings = (() => {
