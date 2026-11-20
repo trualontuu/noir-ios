@@ -326,18 +326,29 @@ export async function waveFeedback(s: WaveSession, type: string, t: Track, playe
 // ---------------------------------------------------------------- поток
 /** Прямая ссылка на mp3 (подписанная, живёт ограниченное время). */
 export async function streamUrl(t: Track, maxKbps = 320): Promise<string> {
+  return (await fileUrl(t, maxKbps, 'mp3')).url;
+}
+
+/**
+ * Подписанная ссылка на файл трека в нужном кодеке (aac — вдвое меньше mp3 при том же слухе).
+ * Если такого кодека у трека нет — берётся mp3.
+ */
+export async function fileUrl(t: Track, maxKbps: number, codec: 'mp3' | 'aac'): Promise<{ url: string; codec: string; kbps: number }> {
   const res: any[] = await get(`/tracks/${trackKey(t)}/download-info`);
-  let mp3 = res.filter(v => v.codec === 'mp3');
-  if (!mp3.length) mp3 = res;
-  const pick = mp3.filter(v => v.bitrateInKbps <= maxKbps).sort((a, b) => b.bitrateInKbps - a.bitrateInKbps)[0]
-    ?? mp3.sort((a, b) => a.bitrateInKbps - b.bitrateInKbps)[0];
+  const full = res.filter(v => !v.preview);
+  const all = full.length ? full : res;
+  let vs = all.filter(v => v.codec === codec);
+  if (!vs.length) vs = all.filter(v => v.codec === 'mp3');
+  if (!vs.length) vs = all;
+  const pick = vs.filter(v => v.bitrateInKbps <= maxKbps).sort((a, b) => b.bitrateInKbps - a.bitrateInKbps)[0]
+    ?? vs.sort((a, b) => a.bitrateInKbps - b.bitrateInKbps)[0];
   const r = await fetch(pick.downloadInfoUrl, { headers: { Authorization: 'OAuth ' + token } });
   if (!r.ok) throw new Error('download-info ' + r.status);
   const xml = await r.text();
   const tag = (n: string) => xml.match(new RegExp(`<${n}>([^<]*)</${n}>`))?.[1] ?? '';
   const host = tag('host'), path = tag('path'), ts = tag('ts'), s = tag('s');
   const sign = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.MD5, SIGN_SALT + path.slice(1) + s);
-  return `https://${host}/get-mp3/${sign}/${ts}${path}`;
+  return { url: `https://${host}/get-${pick.codec}/${sign}/${ts}${path}`, codec: pick.codec, kbps: pick.bitrateInKbps };
 }
 
 // ---------------------------------------------------------------- HTTP

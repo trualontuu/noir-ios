@@ -5,14 +5,15 @@ import { useSyncExternalStore } from 'react';
 export type Settings = {
   colorMode: 'mono' | 'cover';   // как ColorMode в десктопе: строгий ч/б или тон текущей обложки
   normalize: boolean;            // ровная громкость по LUFS
-  quality: 128 | 192 | 320;      // качество потока и загрузок, кбит/с
+  quality: 128 | 192 | 320;      // качество потока, кбит/с
+  dlQuality: 'aac128' | 'aac192' | 'mp3'; // загрузки: AAC вдвое компактнее mp3 320 при близком звуке
   waveScene: '' | 'cs2' | 'road';
   waveMood: string;
   waveDiversity: string;
   crossfade: 0 | 3 | 6 | 10;     // плавный переход между треками, секунд
 };
 
-const defaults: Settings = { colorMode: 'cover', normalize: true, quality: 320, waveScene: '', waveMood: '', waveDiversity: '', crossfade: 6 };
+const defaults: Settings = { colorMode: 'cover', normalize: true, quality: 320, dlQuality: 'aac192', waveScene: '', waveMood: '', waveDiversity: '', crossfade: 6 };
 const file = new File(Paths.document, 'settings.json');
 
 let s: Settings = (() => {

@@ -24,6 +24,14 @@ export default function Settings() {
     { title: ym.login, message: 'Скачанные треки останутся на телефоне', options: ['Выйти из аккаунта', 'Отмена'], destructiveButtonIndex: 0, cancelButtonIndex: 1, userInterfaceStyle: 'dark' },
     async i => { if (i === 0) { player.stop(); await ym.logout(); } },
   );
+  const old = dl.outdated();
+  const busyDl = Object.keys(d.progress).filter(id => d.done[id]).length;
+  const convert = () => ActionSheetIOS.showActionSheetWithOptions(
+    { title: `Перекачать ${ym.tracksWord(old.length)} в ${s.dlQuality === 'mp3' ? 'MP3' : 'формате AAC'}?`,
+      message: 'Нужен интернет. Каждый трек заменяется, только когда новый файл скачан целиком.',
+      options: ['Пережать', 'Отмена'], cancelButtonIndex: 1, userInterfaceStyle: 'dark' },
+    i => { if (i === 0) dl.convert(); },
+  );
   const clear = () => ActionSheetIOS.showActionSheetWithOptions(
     { title: `Удалить все скачанные (${dl.fmtSize(dl.totalBytes())})?`, options: ['Удалить', 'Отмена'], destructiveButtonIndex: 0, cancelButtonIndex: 1, userInterfaceStyle: 'dark' },
     i => { if (i === 0) dl.removeAll(); },
@@ -45,7 +53,7 @@ export default function Settings() {
         </Row>
         <Text style={st.label}>Качество, кбит/с</Text>
         <Segment value={String(s.quality)} accent={th} items={[['128', '128'], ['192', '192'], ['320', '320']]} onPick={v => setSettings({ quality: Number(v) as any })} />
-        <Text style={st.hint}>Для потока и для новых загрузок.</Text>
+        <Text style={st.hint}>Для воспроизведения по сети.</Text>
         <Text style={st.label}>Плавный переход, сек</Text>
         <Segment value={String(s.crossfade)} accent={th} items={[['0', 'Выкл'], ['3', '3'], ['6', '6'], ['10', '10']]} onPick={v => setSettings({ crossfade: Number(v) as any })} />
         <Text style={st.hint}>Конец трека затихает, следующий плавно нарастает.</Text>
@@ -53,6 +61,12 @@ export default function Settings() {
 
       <Group title="Загрузки">
         <Row label="Скачано" hint={count ? `${ym.tracksWord(count)} · ${dl.fmtSize(dl.totalBytes())}` : 'Пока ничего'} />
+        <Text style={st.label}>Формат загрузок</Text>
+        <Segment value={s.dlQuality} accent={th} items={[['aac128', 'AAC 128'], ['aac192', 'AAC 192'], ['mp3', 'MP3']]} onPick={v => setSettings({ dlQuality: v as any })} />
+        <Text style={st.hint}>{DL_HINT[s.dlQuality]}</Text>
+        {old.length > 0 && (busyDl ? <Text style={st.hint}>Пережимаю… осталось {ym.tracksWord(busyDl)}</Text> : (
+          <Pressable onPress={convert}><Text style={[st.action, { color: th.accent }]}>Пережать скачанные ({ym.tracksWord(old.length)})</Text></Pressable>
+        ))}
         {count > 0 && <Pressable onPress={clear}><Text style={[st.action, { color: C.danger }]}>Удалить все загрузки</Text></Pressable>}
       </Group>
 
@@ -79,6 +93,12 @@ export default function Settings() {
     </View>
   );
 }
+
+const DL_HINT = {
+  aac128: 'Меньше всего места: ~1 МБ в минуту. Звук хороший, на большинстве наушников от 320 не отличить.',
+  aac192: 'Рекомендую: ~1,4 МБ в минуту, вдвое меньше MP3 320 — на слух то же самое.',
+  mp3: 'Как было: MP3 в качестве из настройки выше, до ~2,4 МБ в минуту.',
+} as const;
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
