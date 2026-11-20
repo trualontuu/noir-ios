@@ -78,8 +78,23 @@ export default function Library() {
           </FadeIn>
         )}
       />
-      <TopBar y={y} title="Моё" back={false} right={gear} showAt={50} />
+      <TopBar y={y} title="Моё" back={false} right={<BarGear y={y} />} showAt={50} />
     </View>
+  );
+}
+
+/** Шестерёнка в верхней панели: проявляется, когда заголовок с такой же уехал вверх. */
+function BarGear({ y }: { y: Animated.Value }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const id = y.addListener(({ value }) => setOn(v => (value > 40) === v ? v : !v));
+    return () => y.removeListener(id);
+  }, [y]);
+  const op = y.interpolate({ inputRange: [30, 60], outputRange: [0, 1], extrapolate: 'clamp' });
+  return (
+    <Animated.View style={{ opacity: op }} pointerEvents={on ? 'auto' : 'none'}>
+      <GlassButton icon="gearshape" onPress={() => router.push('/library/settings')} />
+    </Animated.View>
   );
 }
 
